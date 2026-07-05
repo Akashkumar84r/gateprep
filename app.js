@@ -8,7 +8,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import {
   getAuth,
-  signInAnonymously,
+  signInWithEmailAndPassword,
+  updatePassword,
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 const firebaseConfig = {
@@ -24,17 +25,12 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Authenticate anonymously so Firestore rules allow read/write
-signInAnonymously(auth).catch((error) => {
-  console.error("Anonymous auth failed:", error);
-});
-
 // === 1. User & Global Database ===
 let currentUserId = null;
 let globalsData = {
   users: {
-    "@akash84r": { password: "1234", displayName: "Akash" },
-    "@mendhi143": { password: "1111", displayName: "Mendhi" },
+    "parasfworld07@gmail.com": { displayName: "Paras" },
+    "subhashreesatapathy119@gmail.com": { displayName: "Subhashree" },
   },
   usefulLinks: [
     { id: "l1", name: "Gemini", url: "https://gemini.google.com" },
@@ -71,8 +67,12 @@ const cancelDashItemBtn = document.getElementById("cancel-dash-item-btn");
 const confirmDashItemBtn = document.getElementById("confirm-dash-item-btn");
 const dashItemTitleInput = document.getElementById("dash-item-title-input");
 const dashItemDescInput = document.getElementById("dash-item-desc-input");
-const dashItemPageTitleInput = document.getElementById("dash-item-page-title-input");
-const dashItemPageDescInput = document.getElementById("dash-item-page-desc-input");
+const dashItemPageTitleInput = document.getElementById(
+  "dash-item-page-title-input",
+);
+const dashItemPageDescInput = document.getElementById(
+  "dash-item-page-desc-input",
+);
 const dashItemModalTitle = document.getElementById("dash-item-modal-title");
 const logoutTrigger = document.getElementById("logout-trigger");
 const logoutModal = document.getElementById("logout-modal");
@@ -103,18 +103,22 @@ async function checkSavedLogin() {
       modifiedGlobals = true;
     }
     if (!globalsData.users[savedUserId].usefulLinks) {
-      globalsData.users[savedUserId].usefulLinks = globalsData.usefulLinks ? [...globalsData.usefulLinks] : [
-        { id: "l1", name: "Gemini", url: "https://gemini.google.com" },
-        { id: "l2", name: "YouTube", url: "https://youtube.com" },
-      ];
+      globalsData.users[savedUserId].usefulLinks = globalsData.usefulLinks
+        ? [...globalsData.usefulLinks]
+        : [
+            { id: "l1", name: "Gemini", url: "https://gemini.google.com" },
+            { id: "l2", name: "YouTube", url: "https://youtube.com" },
+          ];
       modifiedGlobals = true;
     }
     if (modifiedGlobals) {
-      updateDoc(doc(db, "globals", "data"), globalsData).catch(e => console.error(e));
+      updateDoc(doc(db, "globals", "data"), globalsData).catch((e) =>
+        console.error(e),
+      );
     }
 
     const userName = globalsData.users[savedUserId].displayName;
-    
+
     userGreeting.textContent = `Hi, ${userName}`;
     profileInitial.textContent = userName.charAt(0);
     document.getElementById("nav-logo-text").textContent =
@@ -154,43 +158,61 @@ async function performLogin() {
   loginBtnEl.disabled = true;
 
   try {
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      useridInput,
+      passwordInput,
+    );
+
     const globalsRef = doc(db, "globals", "data");
     const globalsSnap = await getDoc(globalsRef);
     if (globalsSnap.exists()) {
       globalsData = globalsSnap.data();
-      // Provide defaults just in case
-      if (!globalsData.users)
+      if (!globalsData.users) {
         globalsData.users = {
-          "@akash84r": { password: "1234", displayName: "Akash" },
+          "parasfworld07@gmail.com": { displayName: "Paras" },
+          "subhashreesatapathy119@gmail.com": { displayName: "Subhashree" },
         };
+      }
       if (!globalsData.usefulLinks) globalsData.usefulLinks = [];
       if (!globalsData.appTitle) globalsData.appTitle = "Project";
     } else {
       await setDoc(globalsRef, globalsData);
     }
-  } catch (e) {
-    console.error("Firebase globals fetch error:", e);
-  }
 
-  if (
-    globalsData.users[useridInput] &&
-    globalsData.users[useridInput].password === passwordInput
-  ) {
+    if (!globalsData.users[useridInput]) {
+      globalsData.users[useridInput] = {
+        displayName: useridInput.split("@")[0],
+      };
+    }
+
     let modifiedGlobals = false;
     if (!globalsData.users[useridInput].editPassword) {
       globalsData.users[useridInput].editPassword = "7890";
       modifiedGlobals = true;
     }
     if (!globalsData.users[useridInput].usefulLinks) {
-      globalsData.users[useridInput].usefulLinks = globalsData.usefulLinks ? [...globalsData.usefulLinks] : [
-        { id: "l1", name: "Gemini", url: "https://gemini.google.com" },
-        { id: "l2", name: "YouTube", url: "https://youtube.com" },
-      ];
+      globalsData.users[useridInput].usefulLinks = globalsData.usefulLinks
+        ? [...globalsData.usefulLinks]
+        : [
+            { id: "l1", name: "Gemini", url: "https://gemini.google.com" },
+            { id: "l2", name: "YouTube", url: "https://youtube.com" },
+          ];
       modifiedGlobals = true;
     }
-    if (modifiedGlobals) {
-      updateDoc(doc(db, "globals", "data"), globalsData).catch(e => console.error(e));
+
+    // Clean up plaintext passwords from globals if they exist (migration step)
+    if (globalsData.users[useridInput].password) {
+      delete globalsData.users[useridInput].password;
+      modifiedGlobals = true;
     }
+
+    if (modifiedGlobals) {
+      updateDoc(doc(db, "globals", "data"), globalsData).catch((e) =>
+        console.error(e),
+      );
+    }
+
     setTimeout(async () => {
       currentUserId = useridInput;
       localStorage.setItem("studyWebUserId", useridInput);
@@ -215,8 +237,9 @@ async function performLogin() {
       loginSpinner.style.display = "none";
       loginBtnEl.disabled = false;
     }, 400);
-  } else {
-    errorMsg.textContent = "Invalid login ID or password.";
+  } catch (error) {
+    console.error("Login failed:", error);
+    errorMsg.textContent = "Invalid email or password.";
     errorMsg.style.display = "block";
     loginBtnText.style.display = "block";
     loginSpinner.style.display = "none";
@@ -257,14 +280,14 @@ confirmLogoutBtn.addEventListener("click", () => {
   isEditMode = false;
   document.getElementById("edit-mode-banner").style.display = "none";
   renderDashboardItems();
-    currentDashboardItems.forEach(item => renderSubPage(item.id));
+  currentDashboardItems.forEach((item) => renderSubPage(item.id));
   ["page-item2", "page-item3"].forEach(renderResourcePage);
   renderUsefulLinks();
   renderSettingsPage();
 });
 
 // === 4. Dark Mode Logic ===
-let isDarkMode = localStorage.getItem("darkMode") !== "false";
+let isDarkMode = localStorage.getItem("darkMode") === "true";
 if (isDarkMode) {
   document.body.classList.add("dark-mode");
   themeIcon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
@@ -302,7 +325,10 @@ if (mobileMenuBtn) {
 // Close sidebar when clicking outside on mobile
 document.addEventListener("click", (e) => {
   if (window.innerWidth <= 768 && isExpanded) {
-    if (e.target === sidebarWrapper || (!sidebarWrapper.contains(e.target) && !mobileMenuBtn.contains(e.target))) {
+    if (
+      e.target === sidebarWrapper ||
+      (!sidebarWrapper.contains(e.target) && !mobileMenuBtn.contains(e.target))
+    ) {
       isExpanded = false;
       sidebarWrapper.classList.remove("expanded");
     }
@@ -310,7 +336,11 @@ document.addEventListener("click", (e) => {
 
   // Close edit mode banner if expanded and clicked outside
   const editModeBanner = document.getElementById("edit-mode-banner");
-  if (editModeBanner && editModeBanner.classList.contains("expanded") && !editModeBanner.contains(e.target)) {
+  if (
+    editModeBanner &&
+    editModeBanner.classList.contains("expanded") &&
+    !editModeBanner.contains(e.target)
+  ) {
     editModeBanner.classList.remove("expanded");
   }
 });
@@ -319,14 +349,22 @@ document.addEventListener("click", (e) => {
 let touchStartX = 0;
 let touchEndX = 0;
 
-document.addEventListener("touchstart", (e) => {
-  touchStartX = e.changedTouches[0].clientX;
-}, { passive: true });
+document.addEventListener(
+  "touchstart",
+  (e) => {
+    touchStartX = e.changedTouches[0].clientX;
+  },
+  { passive: true },
+);
 
-document.addEventListener("touchend", (e) => {
-  touchEndX = e.changedTouches[0].clientX;
-  handleSwipeGesture();
-}, { passive: true });
+document.addEventListener(
+  "touchend",
+  (e) => {
+    touchEndX = e.changedTouches[0].clientX;
+    handleSwipeGesture();
+  },
+  { passive: true },
+);
 
 function handleSwipeGesture() {
   if (window.innerWidth <= 768) {
@@ -344,9 +382,9 @@ function handleSwipeGesture() {
 let iframeClicked = false;
 let isFloating = false;
 
-window.addEventListener('blur', function() {
+window.addEventListener("blur", function () {
   setTimeout(() => {
-    if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+    if (document.activeElement && document.activeElement.tagName === "IFRAME") {
       iframeClicked = true;
     }
   }, 100);
@@ -377,12 +415,16 @@ function activatePage(targetId, pushState = true) {
   // Clear players if navigating away
   if (targetId !== "template-watch") {
     if (isFloating) {
-      document.getElementById("template-watch").classList.add("floating-active");
+      document
+        .getElementById("template-watch")
+        .classList.add("floating-active");
       const floatingWrapper = document.getElementById("floating-wrapper");
       if (floatingWrapper) floatingWrapper.classList.add("floating-mode");
     } else {
       document.getElementById("watch-player-container").innerHTML = "";
-      document.getElementById("template-watch").classList.remove("floating-active");
+      document
+        .getElementById("template-watch")
+        .classList.remove("floating-active");
       const floatingWrapper = document.getElementById("floating-wrapper");
       if (floatingWrapper) {
         floatingWrapper.classList.remove("floating-mode");
@@ -395,7 +437,9 @@ function activatePage(targetId, pushState = true) {
   } else {
     isFloating = false;
     iframeClicked = false;
-    document.getElementById("template-watch").classList.remove("floating-active");
+    document
+      .getElementById("template-watch")
+      .classList.remove("floating-active");
     const floatingWrapper = document.getElementById("floating-wrapper");
     if (floatingWrapper) {
       floatingWrapper.classList.remove("floating-mode");
@@ -410,7 +454,9 @@ function activatePage(targetId, pushState = true) {
   }
 
   // Hide all pages
-  document.querySelectorAll(".page-section").forEach((section) => section.classList.remove("active"));
+  document
+    .querySelectorAll(".page-section")
+    .forEach((section) => section.classList.remove("active"));
 
   // Remove active classes from all nav links
   document.querySelectorAll(".nav-link[data-target]").forEach((link) => {
@@ -497,10 +543,37 @@ actionButtons.forEach((btn) => {
 let isEditMode = false;
 
 const defaultDashboardItems = [
-  { id: "page-sub1", title: "Sub Item 1", desc: "View detailed reports and manage your primary objectives for this week.", pageTitle: "Sub Item 1: Core Mechanics", pageDesc: "Master the foundational pillars of mechanics. Focus on theoretical rigor and numerical proficiency." },
-  { id: "page-sub2", title: "Sub Item 2", desc: "Access your split-view documents, tables, and ongoing drafts.", pageTitle: "Sub Item 2: Operations", pageDesc: "Access your operational documents, tables, and ongoing drafts." },
-  { id: "page-sub3", title: "Sub Item 3", desc: "Check circular analytics, progress rings, and team performance metrics.", pageTitle: "Sub Item 3: Analytics", pageDesc: "Check circular analytics, progress rings, and team performance metrics." },
-  { id: "page-sub4", title: "Sub Item 4", desc: "Review lists, forms, and check off pending tasks from the backlog.", pageTitle: "Sub Item 4: Task List", pageDesc: "Review lists, forms, and check off pending tasks from the backlog." }
+  {
+    id: "page-sub1",
+    title: "Sub Item 1",
+    desc: "View detailed reports and manage your primary objectives for this week.",
+    pageTitle: "Sub Item 1: Core Mechanics",
+    pageDesc:
+      "Master the foundational pillars of mechanics. Focus on theoretical rigor and numerical proficiency.",
+  },
+  {
+    id: "page-sub2",
+    title: "Sub Item 2",
+    desc: "Access your split-view documents, tables, and ongoing drafts.",
+    pageTitle: "Sub Item 2: Operations",
+    pageDesc: "Access your operational documents, tables, and ongoing drafts.",
+  },
+  {
+    id: "page-sub3",
+    title: "Sub Item 3",
+    desc: "Check circular analytics, progress rings, and team performance metrics.",
+    pageTitle: "Sub Item 3: Analytics",
+    pageDesc:
+      "Check circular analytics, progress rings, and team performance metrics.",
+  },
+  {
+    id: "page-sub4",
+    title: "Sub Item 4",
+    desc: "Review lists, forms, and check off pending tasks from the backlog.",
+    pageTitle: "Sub Item 4: Task List",
+    pageDesc:
+      "Review lists, forms, and check off pending tasks from the backlog.",
+  },
 ];
 let currentDashboardItems = [];
 let targetDashIndexForAdd = -1;
@@ -649,7 +722,7 @@ const defaultData = {
 
 async function fetchAndRenderAllSubItems() {
   if (!currentUserId) return;
-  
+
   // Fetch Dashboard Items
   try {
     const dashRef = doc(db, "subItems", currentUserId + "_dashboard");
@@ -662,7 +735,9 @@ async function fetchAndRenderAllSubItems() {
       currentDashboardItems = clonedDash;
     }
     renderDashboardItems();
-  } catch(e) { console.error("Error loading dashboard items", e); }
+  } catch (e) {
+    console.error("Error loading dashboard items", e);
+  }
 
   const pages = [
     "page-sub1",
@@ -693,7 +768,6 @@ async function fetchAndRenderAllSubItems() {
     }
   }
 }
-
 
 function renderDashboardItems() {
   const sidebarNav = document.getElementById("sidebar-sub-nav");
@@ -756,15 +830,17 @@ function renderDashboardItems() {
           <div class="accordion-container" id="container-${item.id}"></div>
         </section>
       `;
-      
+
       // Also fetch content for this page dynamically if not already loaded
       if (!currentPagesData[item.id] && currentUserId) {
-        getDoc(doc(db, "subItems", currentUserId + "_" + item.id)).then(docSnap => {
-          if (docSnap.exists()) {
-            currentPagesData[item.id] = docSnap.data().headings || [];
-            renderSubPage(item.id);
-          }
-        });
+        getDoc(doc(db, "subItems", currentUserId + "_" + item.id)).then(
+          (docSnap) => {
+            if (docSnap.exists()) {
+              currentPagesData[item.id] = docSnap.data().headings || [];
+              renderSubPage(item.id);
+            }
+          },
+        );
       }
     }
   });
@@ -779,9 +855,9 @@ function renderDashboardItems() {
   }
 
   reattachNavTriggers();
-  
+
   // Render sub page contents inside the dynamically created sections
-  currentDashboardItems.forEach(item => {
+  currentDashboardItems.forEach((item) => {
     if (currentPagesData[item.id]) {
       renderSubPage(item.id);
     }
@@ -793,7 +869,9 @@ function renderDashboardItems() {
 }
 
 function reattachNavTriggers() {
-  const newRoutingTriggers = document.querySelectorAll(".nav-link[data-target]:not(.routed), .nav-trigger[data-target]:not(.routed)");
+  const newRoutingTriggers = document.querySelectorAll(
+    ".nav-link[data-target]:not(.routed), .nav-trigger[data-target]:not(.routed)",
+  );
   newRoutingTriggers.forEach((trigger) => {
     trigger.classList.add("routed");
     trigger.addEventListener("click", function (e) {
@@ -801,7 +879,10 @@ function reattachNavTriggers() {
       if (this.style.cursor === "not-allowed") return;
       const target = this.getAttribute("data-target");
 
-      if (this.classList.contains("btn-back-course") || this.classList.contains("btn-back-template")) {
+      if (
+        this.classList.contains("btn-back-course") ||
+        this.classList.contains("btn-back-template")
+      ) {
         if (hasNavigatedInApp) {
           window.history.back();
           return;
@@ -817,7 +898,6 @@ function reattachNavTriggers() {
     });
   });
 }
-
 
 function renderSubPage(pageId) {
   const container = document.getElementById(`container-${pageId}`);
@@ -1008,16 +1088,12 @@ function renderSettingsPage() {
         <div style="padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">${globalsData.appTitle}</div>
       </div>
       <div class="input-group" style="text-align: left;">
-        <label>Your User ID</label>
+        <label>Your Email ID</label>
         <div style="padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">${currentUserId || ""}</div>
       </div>
       <div class="input-group" style="text-align: left;">
         <label>Your Display Name</label>
         <div style="padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">${globalsData.users[currentUserId]?.displayName || ""}</div>
-      </div>
-      <div class="input-group" style="text-align: left;">
-        <label>Your Password</label>
-        <div style="padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">••••••</div>
       </div>
       <div class="input-group" style="text-align: left;">
         <label>Your Edit Password</label>
@@ -1031,32 +1107,33 @@ function renderSettingsPage() {
         <input type="text" id="setting-app-title" value="${globalsData.appTitle}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
       </div>
       <div class="input-group" style="text-align: left;">
-        <label>Your User ID</label>
-        <input type="text" id="setting-user-id" value="${currentUserId || ""}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
+        <label>Your Email ID</label>
+        <input type="text" id="setting-user-id" value="${currentUserId || ""}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" readonly title="Email cannot be changed here." />
       </div>
       <div class="input-group" style="text-align: left;">
         <label>Your Display Name</label>
         <input type="text" id="setting-display-name" value="${globalsData.users[currentUserId]?.displayName || ""}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
       </div>
       <div class="input-group" style="text-align: left;">
-        <label>Your Password</label>
-        <input type="text" id="setting-password" value="${globalsData.users[currentUserId]?.password || ""}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
+        <label>Change Login Password (optional)</label>
+        <input type="text" id="setting-password" placeholder="Leave blank to keep current" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
       </div>
       <div class="input-group" style="text-align: left;">
         <label>Your Edit Password</label>
         <input type="text" id="setting-edit-password" value="${globalsData.users[currentUserId]?.editPassword || ""}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-main);" />
       </div>
       <button id="save-settings-btn" class="btn-confirm" style="background: var(--primary); color: white; padding: 12px; margin-top: 10px;">Save Settings</button>
+      <div id="settings-error-msg" style="color: var(--error-text); display: none; margin-top: 10px; font-size: 14px;"></div>
     `;
 
     document
       .getElementById("save-settings-btn")
       .addEventListener("click", async () => {
+        const errorMsgEl = document.getElementById("settings-error-msg");
+        errorMsgEl.style.display = "none";
+
         const newTitle = document
           .getElementById("setting-app-title")
-          .value.trim();
-        const newUserId = document
-          .getElementById("setting-user-id")
           .value.trim();
         const newName = document
           .getElementById("setting-display-name")
@@ -1069,37 +1146,33 @@ function renderSettingsPage() {
           .value.trim();
 
         if (newTitle) globalsData.appTitle = newTitle;
-
-        if (newUserId && newUserId !== currentUserId) {
-          if (globalsData.users[newUserId]) {
-            alert("This User ID is already taken. Please choose another.");
-            return;
-          }
-          globalsData.users[newUserId] = {
-            ...globalsData.users[currentUserId],
-          };
-          delete globalsData.users[currentUserId];
-          currentUserId = newUserId;
-        }
-
         if (newName) globalsData.users[currentUserId].displayName = newName;
-        if (newPass) globalsData.users[currentUserId].password = newPass;
-        if (newEditPass) globalsData.users[currentUserId].editPassword = newEditPass;
+        if (newEditPass)
+          globalsData.users[currentUserId].editPassword = newEditPass;
 
-        await updateDoc(doc(db, "globals", "data"), globalsData);
+        try {
+          if (newPass) {
+            await updatePassword(auth.currentUser, newPass);
+          }
+          await updateDoc(doc(db, "globals", "data"), globalsData);
 
-        // Update UI elements
-        document.getElementById("nav-logo-text").textContent =
-          globalsData.appTitle;
-        const userGreeting = document.getElementById("user-greeting");
-        const profileInitial = document.getElementById("profile-initial");
-        userGreeting.textContent = `Hi, ${globalsData.users[currentUserId].displayName}`;
-        profileInitial.textContent =
-          globalsData.users[currentUserId].displayName.charAt(0);
+          // Update UI elements
+          document.getElementById("nav-logo-text").textContent =
+            globalsData.appTitle;
+          const userGreeting = document.getElementById("user-greeting");
+          const profileInitial = document.getElementById("profile-initial");
+          userGreeting.textContent = `Hi, ${globalsData.users[currentUserId].displayName}`;
+          profileInitial.textContent =
+            globalsData.users[currentUserId].displayName.charAt(0);
 
-        const btn = document.getElementById("save-settings-btn");
-        btn.textContent = "Saved!";
-        setTimeout(() => (btn.textContent = "Save Settings"), 2000);
+          const btn = document.getElementById("save-settings-btn");
+          btn.textContent = "Saved!";
+          document.getElementById("setting-password").value = ""; // clear password field
+          setTimeout(() => (btn.textContent = "Save Settings"), 2000);
+        } catch (error) {
+          errorMsgEl.textContent = "Failed to save: " + error.message;
+          errorMsgEl.style.display = "block";
+        }
       });
   }
 }
@@ -1122,13 +1195,16 @@ document.addEventListener("click", async (e) => {
 
       if (pdfUrl && window.innerWidth <= 768) {
         let safePdfUrl = pdfUrl;
-        if (safePdfUrl.includes("drive.google.com") && safePdfUrl.includes("/view")) {
+        if (
+          safePdfUrl.includes("drive.google.com") &&
+          safePdfUrl.includes("/view")
+        ) {
           safePdfUrl = safePdfUrl.replace(/\/view.*$/, "/preview");
         }
         pdfContainer.innerHTML = `<iframe src="${safePdfUrl}" width="100%" height="100%" style="border:none;" allowfullscreen></iframe>`;
         pdfContainer.classList.add("has-pdf");
       } else {
-        if(pdfContainer) {
+        if (pdfContainer) {
           pdfContainer.innerHTML = "";
           pdfContainer.classList.remove("has-pdf");
         }
@@ -1238,7 +1314,8 @@ document.addEventListener("click", async (e) => {
     const link = globalsData.users[currentUserId].usefulLinks[lIndex];
     document.getElementById("link-name-input").value = link.name;
     document.getElementById("link-url-input").value = link.url;
-    document.getElementById("link-modal-title").textContent = "Edit Useful Link";
+    document.getElementById("link-modal-title").textContent =
+      "Edit Useful Link";
     document.getElementById("delete-link-btn").style.display = "block";
     document.getElementById("link-modal").classList.add("show");
   }
@@ -1339,7 +1416,8 @@ const exitEditModeBtn = document.getElementById("exit-edit-mode-btn");
 editModeBtn.addEventListener("click", () => {
   if (isEditMode) {
     document.getElementById("alert-modal-title").textContent = "Notice";
-    document.getElementById("alert-modal-text").textContent = "You are already in Edit Mode.";
+    document.getElementById("alert-modal-text").textContent =
+      "You are already in Edit Mode.";
     document.getElementById("alert-modal").classList.add("show");
     return;
   }
@@ -1364,7 +1442,7 @@ confirmEditBtn.addEventListener("click", () => {
     editModeBanner.style.display = "flex";
     editModeBanner.classList.remove("expanded");
     renderDashboardItems();
-    currentDashboardItems.forEach(item => renderSubPage(item.id));
+    currentDashboardItems.forEach((item) => renderSubPage(item.id));
     ["page-item2", "page-item3"].forEach(renderResourcePage);
     renderUsefulLinks();
     renderSettingsPage();
@@ -1373,9 +1451,11 @@ confirmEditBtn.addEventListener("click", () => {
   }
 });
 
-document.getElementById("edit-mode-banner-icon").addEventListener("click", () => {
-  editModeBanner.classList.toggle("expanded");
-});
+document
+  .getElementById("edit-mode-banner-icon")
+  .addEventListener("click", () => {
+    editModeBanner.classList.toggle("expanded");
+  });
 
 exitEditModeBtn.addEventListener("click", (e) => {
   e.stopPropagation(); // prevent toggling the banner
@@ -1388,17 +1468,17 @@ document.getElementById("cancel-exit-btn").addEventListener("click", () => {
 
 document.getElementById("confirm-exit-btn").addEventListener("click", () => {
   document.getElementById("exit-confirm-modal").classList.remove("show");
-  
+
   const overlay = document.getElementById("saving-overlay");
   overlay.style.display = "flex";
-  
+
   setTimeout(() => {
     overlay.style.display = "none";
     isEditMode = false;
     editModeBanner.style.display = "none";
     editModeBanner.classList.remove("expanded");
     renderDashboardItems();
-    currentDashboardItems.forEach(item => renderSubPage(item.id));
+    currentDashboardItems.forEach((item) => renderSubPage(item.id));
     ["page-item2", "page-item3"].forEach(renderResourcePage);
     renderUsefulLinks();
     renderSettingsPage();
@@ -1417,9 +1497,13 @@ document
       const { type, pageId, hIndex, shIndex, rIndex } = itemToDelete;
       if (type === "dash") {
         currentDashboardItems.splice(itemToDelete.idx, 1);
-        await setDoc(doc(db, "subItems", currentUserId + "_dashboard"), { items: currentDashboardItems });
+        await setDoc(doc(db, "subItems", currentUserId + "_dashboard"), {
+          items: currentDashboardItems,
+        });
         renderDashboardItems();
-        document.getElementById("delete-confirm-modal").classList.remove("show");
+        document
+          .getElementById("delete-confirm-modal")
+          .classList.remove("show");
         return;
       } else if (type === "h") {
         currentPagesData[pageId].splice(hIndex, 1);
@@ -1428,7 +1512,10 @@ document
       } else if (type === "r") {
         currentPagesData[pageId].splice(rIndex, 1);
       } else if (type === "l") {
-        globalsData.users[currentUserId].usefulLinks.splice(itemToDelete.lIndex, 1);
+        globalsData.users[currentUserId].usefulLinks.splice(
+          itemToDelete.lIndex,
+          1,
+        );
         await updateDoc(doc(db, "globals", "data"), {
           users: globalsData.users,
         });
@@ -1466,9 +1553,12 @@ document
       currentPagesData[itemToEdit.pageId][itemToEdit.hIndex].title = title;
       currentPagesData[itemToEdit.pageId][itemToEdit.hIndex].subtitle =
         subtitle;
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId), {
-        headings: currentPagesData[itemToEdit.pageId],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId),
+        {
+          headings: currentPagesData[itemToEdit.pageId],
+        },
+      );
       document.getElementById("heading-modal").classList.remove("show");
       renderSubPage(itemToEdit.pageId);
       itemToEdit = null;
@@ -1481,9 +1571,12 @@ document
         subheadings: [],
       };
       currentPagesData[targetPageForAdd].push(newHeading);
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + targetPageForAdd), {
-        headings: currentPagesData[targetPageForAdd],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + targetPageForAdd),
+        {
+          headings: currentPagesData[targetPageForAdd],
+        },
+      );
       document.getElementById("heading-modal").classList.remove("show");
       renderSubPage(targetPageForAdd);
     }
@@ -1518,9 +1611,12 @@ document
       sh.description = desc;
       sh.watch = watch;
       sh.pdf = pdfUrl;
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId), {
-        headings: currentPagesData[itemToEdit.pageId],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId),
+        {
+          headings: currentPagesData[itemToEdit.pageId],
+        },
+      );
       document.getElementById("subheading-modal").classList.remove("show");
       renderSubPage(itemToEdit.pageId);
       itemToEdit = null;
@@ -1538,9 +1634,12 @@ document
       currentPagesData[targetPageForAdd][targetHIndexForAdd].subheadings.push(
         newSubheading,
       );
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + targetPageForAdd), {
-        headings: currentPagesData[targetPageForAdd],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + targetPageForAdd),
+        {
+          headings: currentPagesData[targetPageForAdd],
+        },
+      );
       document.getElementById("subheading-modal").classList.remove("show");
       renderSubPage(targetPageForAdd);
     }
@@ -1564,9 +1663,12 @@ document
       res.title = title;
       res.description = desc;
       res.pdf = pdfUrl;
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId), {
-        headings: currentPagesData[itemToEdit.pageId],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + itemToEdit.pageId),
+        {
+          headings: currentPagesData[itemToEdit.pageId],
+        },
+      );
       document.getElementById("resource-modal").classList.remove("show");
       renderResourcePage(itemToEdit.pageId);
       itemToEdit = null;
@@ -1578,9 +1680,12 @@ document
         pdf: pdfUrl,
       };
       currentPagesData[targetPageForAdd].push(newResource);
-      await updateDoc(doc(db, "subItems", currentUserId + "_" + targetPageForAdd), {
-        headings: currentPagesData[targetPageForAdd],
-      });
+      await updateDoc(
+        doc(db, "subItems", currentUserId + "_" + targetPageForAdd),
+        {
+          headings: currentPagesData[targetPageForAdd],
+        },
+      );
       document.getElementById("resource-modal").classList.remove("show");
       renderResourcePage(targetPageForAdd);
     }
@@ -1606,11 +1711,17 @@ document
     if (!name || !url) return;
 
     if (itemToEdit && itemToEdit.type === "l") {
-      globalsData.users[currentUserId].usefulLinks[itemToEdit.lIndex].name = name;
+      globalsData.users[currentUserId].usefulLinks[itemToEdit.lIndex].name =
+        name;
       globalsData.users[currentUserId].usefulLinks[itemToEdit.lIndex].url = url;
     } else {
-      if (!globalsData.users[currentUserId].usefulLinks) globalsData.users[currentUserId].usefulLinks = [];
-      globalsData.users[currentUserId].usefulLinks.push({ id: "l" + Date.now(), name, url });
+      if (!globalsData.users[currentUserId].usefulLinks)
+        globalsData.users[currentUserId].usefulLinks = [];
+      globalsData.users[currentUserId].usefulLinks.push({
+        id: "l" + Date.now(),
+        name,
+        url,
+      });
     }
     await updateDoc(doc(db, "globals", "data"), {
       users: globalsData.users,
@@ -1633,17 +1744,18 @@ window.addEventListener("popstate", (e) => {
   if (e.state && e.state.page) {
     activatePage(e.state.page, false);
   } else {
-    if (localStorage.getItem("studyWebUserId")) activatePage("page-item1", false);
+    if (localStorage.getItem("studyWebUserId"))
+      activatePage("page-item1", false);
   }
 });
 
 function showSaving() {
   const overlay = document.getElementById("saving-overlay");
-  if(overlay) overlay.style.display = "flex";
+  if (overlay) overlay.style.display = "flex";
 }
 function hideSaving() {
   const overlay = document.getElementById("saving-overlay");
-  if(overlay) overlay.style.display = "none";
+  if (overlay) overlay.style.display = "none";
 }
 
 // Float Video Button Events
@@ -1653,7 +1765,9 @@ if (floatVideoBtn) {
     isFloating = true;
     iframeClicked = true; // force it to float
     // Trigger back button
-    const backBtn = document.querySelector(".btn-back-template.nav-trigger[data-target]");
+    const backBtn = document.querySelector(
+      ".btn-back-template.nav-trigger[data-target]",
+    );
     if (backBtn) {
       backBtn.click();
     }
@@ -1666,7 +1780,9 @@ if (closeFloatBtn) {
     isFloating = false;
     iframeClicked = false;
     document.getElementById("watch-player-container").innerHTML = "";
-    document.getElementById("template-watch").classList.remove("floating-active");
+    document
+      .getElementById("template-watch")
+      .classList.remove("floating-active");
     const floatingWrapper = document.getElementById("floating-wrapper");
     if (floatingWrapper) {
       floatingWrapper.classList.remove("floating-mode");
@@ -1700,7 +1816,7 @@ if (dragHandle && floatingWrapperObj) {
     const rect = floatingWrapperObj.getBoundingClientRect();
     dragOffsetX = clientX - rect.left;
     dragOffsetY = clientY - rect.top;
-    
+
     // Overlay over iframe to capture mouse moves without iframe eating them
     let overlay = document.getElementById("drag-iframe-overlay");
     if (!overlay) {
@@ -1718,17 +1834,17 @@ if (dragHandle && floatingWrapperObj) {
 
   const doDrag = (clientX, clientY) => {
     if (!isDragging) return;
-    
+
     let newLeft = clientX - dragOffsetX;
     let newTop = clientY - dragOffsetY;
-    
+
     // Boundaries
     const maxX = window.innerWidth - floatingWrapperObj.offsetWidth;
     const maxY = window.innerHeight - floatingWrapperObj.offsetHeight;
-    
+
     newLeft = Math.max(0, Math.min(newLeft, maxX));
     newTop = Math.max(0, Math.min(newTop, maxY));
-    
+
     floatingWrapperObj.style.left = `${newLeft}px`;
     floatingWrapperObj.style.top = `${newTop}px`;
     floatingWrapperObj.style.bottom = "auto";
@@ -1743,17 +1859,27 @@ if (dragHandle && floatingWrapperObj) {
     }
   };
 
-  dragHandle.addEventListener("mousedown", (e) => startDrag(e.clientX, e.clientY));
+  dragHandle.addEventListener("mousedown", (e) =>
+    startDrag(e.clientX, e.clientY),
+  );
   document.addEventListener("mousemove", (e) => doDrag(e.clientX, e.clientY));
   document.addEventListener("mouseup", endDrag);
 
-  dragHandle.addEventListener("touchstart", (e) => startDrag(e.touches[0].clientX, e.touches[0].clientY), { passive: false });
-  document.addEventListener("touchmove", (e) => {
-    if (isDragging) {
-      e.preventDefault(); // prevent scrolling while dragging
-      doDrag(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  }, { passive: false });
+  dragHandle.addEventListener(
+    "touchstart",
+    (e) => startDrag(e.touches[0].clientX, e.touches[0].clientY),
+    { passive: false },
+  );
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (isDragging) {
+        e.preventDefault(); // prevent scrolling while dragging
+        doDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    },
+    { passive: false },
+  );
   document.addEventListener("touchend", endDrag);
 }
 
@@ -1804,11 +1930,13 @@ confirmDashItemBtn.addEventListener("click", async () => {
       title: title,
       desc: desc,
       pageTitle: pageTitle,
-      pageDesc: pageDesc
+      pageDesc: pageDesc,
     });
     // Initialize empty data for new page
     currentPagesData[newId] = [];
-    await setDoc(doc(db, "subItems", currentUserId + "_" + newId), { headings: [] });
+    await setDoc(doc(db, "subItems", currentUserId + "_" + newId), {
+      headings: [],
+    });
   } else {
     currentDashboardItems[targetDashIndexForAdd].title = title;
     currentDashboardItems[targetDashIndexForAdd].desc = desc;
@@ -1818,7 +1946,9 @@ confirmDashItemBtn.addEventListener("click", async () => {
 
   try {
     showSaving();
-    await setDoc(doc(db, "subItems", currentUserId + "_dashboard"), { items: currentDashboardItems });
+    await setDoc(doc(db, "subItems", currentUserId + "_dashboard"), {
+      items: currentDashboardItems,
+    });
     renderDashboardItems();
     dashItemModal.classList.remove("show");
     hideSaving();
