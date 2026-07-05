@@ -213,30 +213,28 @@ async function performLogin() {
       );
     }
 
-    setTimeout(async () => {
-      currentUserId = useridInput;
-      localStorage.setItem("studyWebUserId", useridInput);
-      const userName = globalsData.users[useridInput].displayName;
-      userGreeting.textContent = `Hi, ${userName}`;
-      profileInitial.textContent = userName.charAt(0);
-      document.getElementById("nav-logo-text").textContent =
-        globalsData.appTitle;
+    currentUserId = useridInput;
+    localStorage.setItem("studyWebUserId", useridInput);
+    const userName = globalsData.users[useridInput].displayName;
+    userGreeting.textContent = `Hi, ${userName}`;
+    profileInitial.textContent = userName.charAt(0);
+    document.getElementById("nav-logo-text").textContent =
+      globalsData.appTitle;
 
-      renderUsefulLinks();
-      renderSettingsPage();
-      await fetchAndRenderAllSubItems();
+    renderUsefulLinks();
+    renderSettingsPage();
+    await fetchAndRenderAllSubItems();
 
-      const savedPage = localStorage.getItem("activePage") || "page-item1";
-      activatePage(savedPage);
+    const savedPage = localStorage.getItem("activePage") || "page-item1";
+    activatePage(savedPage);
 
-      loginPage.style.display = "none";
-      dashboardPage.style.display = "flex";
+    loginPage.style.display = "none";
+    dashboardPage.style.display = "flex";
 
-      // Reset Button
-      loginBtnText.style.display = "block";
-      loginSpinner.style.display = "none";
-      loginBtnEl.disabled = false;
-    }, 400);
+    // Reset Button
+    loginBtnText.style.display = "block";
+    loginSpinner.style.display = "none";
+    loginBtnEl.disabled = false;
   } catch (error) {
     console.error("Login failed:", error);
     errorMsg.textContent = "Invalid email or password.";
